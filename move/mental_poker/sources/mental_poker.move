@@ -80,12 +80,13 @@ public struct MENTAL_POKER has drop{}
 fun init(mental_poker:MENTAL_POKER,ctx: &mut TxContext){
     package::claim_and_keep(mental_poker,ctx);
 
-    // Creating and sending the HouseCap object to the sender.
-    let game_data_cap = GameDataCap {
-        id: object::new(ctx)
-    };
-
-    transfer::transfer(game_data_cap, ctx.sender());
+    // // Creating and sending the HouseCap object to the sender.
+    // let game_data_cap = GameDataCap {
+    //     id: object::new(ctx)
+    // };
+    initialize_game_data(ctx);
+    // object::delete(game_data_cap.id);
+    // transfer::transfer(game_data_cap, ctx.sender());
 }
 
 
@@ -255,7 +256,7 @@ fun internal_start_game(coin: Coin<SUI>, game_data: &mut GameData, fee_bp: u16, 
     (curr_game.id(),curr_game,false)
 }
 
-public fun initialize_game_data(game_data_cap: GameDataCap, ctx: &mut TxContext) {
+public fun initialize_game_data( ctx: &mut TxContext) {
     let  game_data = GameData {
         id: object::new(ctx),
         balance: sui::balance::zero(),
@@ -268,9 +269,6 @@ public fun initialize_game_data(game_data_cap: GameDataCap, ctx: &mut TxContext)
         game_count:10000,
         current_game: new_poker_game(10000,ctx)
     };
-
-    let GameDataCap { id } = game_data_cap;
-    object::delete(id);
     transfer::share_object(game_data);
 }
 
