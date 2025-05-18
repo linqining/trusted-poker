@@ -59,8 +59,8 @@ public struct GameData has key {
     balance: Balance<SUI>,
     // Address of the house or the game operator.
     house: address,
-    // Public key used to verify the beacon produced by the back-end.
-    public_key: vector<u8>,
+    // // Public key used to verify the beacon produced by the back-end.
+    // public_key: vector<u8>,
     // Maximum stake amount a player can bet in a single game.
     max_stake: u64,
     // Minimum stake amount required to play the game.
@@ -69,6 +69,8 @@ public struct GameData has key {
     fees: Balance<SUI>,
     // The default fee in basis points. 1 basis point = 0.01%.
     base_fee_in_bp: u16,
+    game_count:u64,
+    current_game: PokerGame
 }
 
 
@@ -92,7 +94,7 @@ fun init(mental_poker:MENTAL_POKER,ctx: &mut TxContext){
 
 // === Events ===
 public struct NewGame has copy, drop {
-    game_id: ID,
+    game_id: u64,
     user_stake: u64,
     fee_bp: u16,
     players: vector<address>
@@ -106,17 +108,15 @@ public struct Outcome has copy, drop {
 }
 
 // === Public Functions ===
-public fun start_game(bet_coins: Coin<SUI>, game_data: &mut GameData, ctx: &mut TxContext): ID {
+public fun start_game(bet_coins: Coin<SUI>, game_data: &mut GameData, ctx: &mut TxContext): u64 {
     let fee_bp = game_data.base_fee_in_bp();
-
-
     let (id, _new_game,isNew) = internal_start_game(bet_coins, game_data, fee_bp, ctx);
     //todo 编译器为什么要在面认为可以？
     if (isNew){
-        let new_game = new_poker_game(ctx);
-        dof::add(game_data.borrow_mut(), b"current_game",new_game);
+        game_data.game_count = game_data.game_count + 1;
+        let new_game = new_poker_game(game_data.game_count,ctx);
+        game_data.current_game = new_game;
     };
-
     id
 }
 
@@ -218,15 +218,15 @@ public fun game_exists(game_data: &GameData, game_id: ID): bool {
     dof::exists_(game_data.borrow(), game_id)
 }
 
-/// Helper function to check that a game exists and return a reference to the game Object.
-/// Can be used in combination with any accessor to retrieve the desired game field.
-public fun borrow_game(game_id: ID, game_data: &GameData): &poker_game::PokerGame {
-    assert!(game_exists(game_data, game_id), EGameDoesNotExist);
-    dof::borrow(game_data.borrow(), game_id)
-}
+// /// Helper function to check that a game exists and return a reference to the game Object.
+// /// Can be used in combination with any accessor to retrieve the desired game field.
+// public fun borrow_game(game_id: ID, game_data: &GameData): &poker_game::PokerGame {
+//     assert!(game_exists(game_data, game_id), EGameDoesNotExist);
+//     dof::borrow(game_data.borrow(), game_id)
+// }
 
 // === Private Functions ===
-fun internal_start_game(coin: Coin<SUI>, game_data: &mut GameData, fee_bp: u16, ctx: &mut TxContext): (ID, &mut poker_game::PokerGame,bool) {
+fun internal_start_game(coin: Coin<SUI>, game_data: &mut GameData, fee_bp: u16, ctx: &mut TxContext): (u64, &mut poker_game::PokerGame,bool) {
     let user_stake = coin.value();
     assert!(user_stake <= game_data.max_stake(), EStakeTooHigh);
     assert!(user_stake >= game_data.min_stake(), EStakeTooLow);
@@ -235,12 +235,7 @@ fun internal_start_game(coin: Coin<SUI>, game_data: &mut GameData, fee_bp: u16, 
     let bet_balance = coin.into_balance();
     game_data.add_balalce(bet_balance);
 
-    if (!dof::exists_with_type<vector<u8>,PokerGame>(game_data.borrow(), b"current_game")){
-        let new_game = new_poker_game(ctx);
-        dof::add(game_data.borrow_mut(), b"current_game",new_game);
-    };
-
-    let curr_game:&mut PokerGame = dof::borrow_mut(game_data.borrow_mut(), b"current_game");
+    let curr_game:&mut PokerGame =&mut  game_data.current_game;
 
     let player_num = curr_game.join_user(ctx.sender(),coin_amount);
     if (player_num>=2){
@@ -260,23 +255,22 @@ fun internal_start_game(coin: Coin<SUI>, game_data: &mut GameData, fee_bp: u16, 
     (curr_game.id(),curr_game,false)
 }
 
-public fun initialize_game_data(game_data_cap: GameDataCap, coin: Coin<SUI>, public_key: vector<u8>, ctx: &mut TxContext) {
-    assert!(coin.value() > 0, EInsufficientBalance);
-
+public fun initialize_game_data(game_data_cap: GameDataCap, ctx: &mut TxContext) {
     let  game_data = GameData {
         id: object::new(ctx),
-        balance: coin.into_balance(),
+        balance: sui::balance::zero(),
         house: ctx.sender(),
-        public_key,
+        // public_key: ctx.sender(),
         max_stake: 10_000_000_000, // 10 SUI = 10^9.
-        min_stake: 1_000_000_000, // 1 SUI.
+        min_stake: 100_000_000, // 0.1 SUI.
         fees: balance::zero(),
         base_fee_in_bp: 100, // 1% in basis points.
+        game_count:10000,
+        current_game: new_poker_game(10000,ctx)
     };
 
     let GameDataCap { id } = game_data_cap;
     object::delete(id);
-
     transfer::share_object(game_data);
 }
 
@@ -337,10 +331,10 @@ public fun house(game_data: &GameData): address {
     game_data.house
 }
 
-/// Returns the public key of the house.
-public fun public_key(game_data: &GameData): vector<u8> {
-    game_data.public_key
-}
+// /// Returns the public key of the house.
+// public fun public_key(game_data: &GameData): vector<u8> {
+//     game_data.public_key
+// }
 
 /// Returns the max stake of the house.
 public fun max_stake(game_data: &GameData): u64 {

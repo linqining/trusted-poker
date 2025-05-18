@@ -11,17 +11,17 @@ use sui::sui::SUI;
 use sui::token::from_coin_action;
 
 // === Structs ===
-public struct PokerGame has key, store {
-    id: UID,
+public struct PokerGame has  store,drop {
+    id: u64,
     game_start_epoch: u64,
     stake: u64, // sui amount
     fee_bp: u16,
     players: vector<address>
 }
 
-public fun new_poker_game(ctx :&mut TxContext): PokerGame {
+public fun new_poker_game(game_seq: u64,ctx :&mut TxContext): PokerGame {
      PokerGame{
-        id:object::new(ctx),
+        id:game_seq,
         game_start_epoch:ctx.epoch(),
         stake: 0,
         fee_bp:100,
@@ -64,8 +64,8 @@ public fun get_players(game: &PokerGame): vector<address> {
 //     game.id
 // }
 
-public fun id(game: &PokerGame): ID {
-    uid_to_inner(&game.id)
+public fun id(game: &PokerGame):u64 {
+    game.id
 }
 
 public fun get_state(game: &PokerGame):u64{
