@@ -17,6 +17,7 @@ const EStakeTooHigh: u64 = 1;
 const EGameDoesNotExist: u64 = 6;
 const EPlayerMisMatch: u64 = 7;
 const EExceedClaim: u64 = 8;
+const EPermissionDenied: u64 = 9;
 
 // // For Move coding conventions, see
 // // https://docs.sui.io/concepts/sui-move-concepts/conventions
@@ -110,9 +111,11 @@ public fun start_game(bet_coins: Coin<SUI>, game_data: &mut GameData, ctx: &mut 
     id
 }
 
-public fun finish_game(game_id: ID,  game_data: &mut GameData,user_results:&vector<UserGameResult>,  ctx: &mut TxContext): (u64) {
+public fun finish_game(game_id: ID,  game_data: &mut GameData,user_results:&vector<UserGameResult>,  ctx: &mut TxContext){
     // Ensure that the game exists.
     assert!(game_exists(game_data, game_id), EGameDoesNotExist);
+
+    assert!(game_data.house == ctx.sender(), EPermissionDenied);
 
     let exist_game:&PokerGame = dof::borrow(game_data.borrow(),game_id);
     assert!(exist_game.get_players().length()==user_results.length(),EPlayerMisMatch);
@@ -157,8 +160,6 @@ public fun finish_game(game_id: ID,  game_data: &mut GameData,user_results:&vect
     };
     // Emit the Outcome event
     emit(outcome);
-    // return the total amount to be sent to the player, (and the player address)
-    (total_claim)
 }
 
 // === Public-View Functions ===
@@ -182,6 +183,7 @@ public fun borrow_game_mut(game_id: ID, game_data: &mut GameData): &mut PokerGam
 }
 
 // === Private Functions ===
+#[allow(unused_mut_parameter)]
 fun internal_start_game(coin: Coin<SUI>, game_data: &mut GameData, fee_bp: u16, ctx: &mut TxContext): (ID, &mut PokerGame,bool) {
     let user_stake = coin.value();
     assert!(user_stake <= game_data.max_stake(), EStakeTooHigh);
