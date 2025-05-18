@@ -1,40 +1,22 @@
 module mental_poker::mental_poker;
 
-use std::option::none;
 use sui::coin;
-use sui::coin::create_currency;
-use sui::transfer::{public_freeze_object,};
-use sui::url::Url;
-use sui::transfer::{ public_transfer,share_object,transfer};
-use tp_coin::tp_coin::TP_COIN;
-
-use std::ascii::String;
-use std::string::append;
-use mental_poker::poker_game::{new_poker_game, PokerGame};
-use mental_poker::poker_game;
 use sui::coin::{Coin};
 use sui::sui::SUI;
-use sui::bls12381::bls12381_min_pk_verify;
 use sui::event::emit;
 use sui::dynamic_object_field::{Self as dof};
 use sui::balance::{Self, Balance};
 use sui::package::{Self};
-#[test_only]
-use sui::object::uid_to_inner;
-use std::address;
+
 
 // === Errors ===
 const EStakeTooLow: u64 = 0;
 const EStakeTooHigh: u64 = 1;
-const EInvalidBlsSig: u64 = 2;
-const EInsufficientHouseBalance: u64 = 5;
+// const EInvalidBlsSig: u64 = 2;
+// const EInsufficientHouseBalance: u64 = 5;
 const EGameDoesNotExist: u64 = 6;
-
-
-
-
-
-
+const EPlayerMisMatch: u64 = 7;
+const EExceedClaim: u64 = 8;
 
 // // For Move coding conventions, see
 // // https://docs.sui.io/concepts/sui-move-concepts/conventions
@@ -50,7 +32,7 @@ public struct GameDataCap has key {
 
 // === Errors ===
 const ECallerNotHouse: u64 = 0;
-const EInsufficientBalance: u64 = 1;
+// const EInsufficientBalance: u64 = 1;
 // === Structs ===
 
 /// Configuration and Treasury shared object, managed by the house.
@@ -89,7 +71,10 @@ fun init(mental_poker:MENTAL_POKER,ctx: &mut TxContext){
     // transfer::transfer(game_data_cap, ctx.sender());
 }
 
-
+public struct UserGameResult {
+    player: address,
+    chip_amount: u64,
+}
 
 
 
@@ -101,11 +86,15 @@ public struct NewGame has copy, drop {
     players: vector<address>
 }
 
+public struct UserRes has copy, drop {
+    player: address,
+    amount: u64,
+}
+
 /// Emitted when a game has finished.
 public struct Outcome has copy, drop {
     game_id: ID,
-    result: u64,
-    player: address,
+    result: vector<UserRes>,
 }
 
 // === Public Functions ===
@@ -121,89 +110,56 @@ public fun start_game(bet_coins: Coin<SUI>, game_data: &mut GameData, ctx: &mut 
     id
 }
 
-// public fun finish_game(game_id: ID, bls_sig: vector<u8>, game_data: &mut GameData, num_balls: u64, ctx: &mut TxContext): (u64, address, vector<u8>) {
-//     // Ensure that the game exists.
-//     assert!(game_exists(game_data, game_id), EGameDoesNotExist);
-//
-//     // Retrieves and removes the game from HouseData, preparing for outcome calculation.
-//     let PokerGame {
-//         id,
-//         game_start_epoch: _,
-//         stake,
-//         fee_bp: _,
-//         players:_,
-//     } = dof::remove<ID, PokerGame>(game_data.borrow_mut(), game_id);
-//
-//     object::delete(id);
-//
-//     // Validates the BLS signature against the VRF input.
-//     let is_sig_valid = bls12381_min_pk_verify(&bls_sig, &game_data.public_key(), &vrf_input);
-//     assert!(is_sig_valid, EInvalidBlsSig);
-//
-//     // Initialize the extended beacon vector and a counter for hashing.
-//     let mut extended_beacon = vector[];
-//     let mut counter: u8 = 0;
-//
-//     // Extends the beacon until it has enough data for all ball outcomes.
-//     while (extended_beacon.length() < (num_balls * 12)) {
-//         // Create a new vector combining the original BLS signature with the current counter value.
-//         let mut hash_input = vector[];
-//         hash_input.append(bls_sig);
-//         hash_input.push_back(counter);
-//         // Generate a new hash block from the unique hash input.
-//         let block = blake2b256(&hash_input);
-//         // Append the generated hash block to the extended beacon.
-//         extended_beacon.append(block);
-//         // Increment the counter for the next iteration to ensure a new unique hash input.
-//         counter = counter + 1;
-//     };
-//
-//     // Initializes variables for calculating game outcome.
-//     let mut trace = vector[];
-//     // Calculate the stake amount per ball
-//     let stake_per_ball = stake.value<SUI>() / num_balls;
-//     let mut total_funds_amount: u64 = 0;
-//
-//     // Calculates outcome for each ball based on the extended beacon.
-//     let mut ball_index = 0;
-//     while (ball_index < num_balls) {
-//         let mut state: u64 = 0;
-//         let mut i = 0;
-//         while (i < 12) {
-//             // Calculate the byte index for the current ball and iteration.
-//             let byte_index = (ball_index * 12) + i;
-//             // Retrieve the byte from the extended beacon.
-//             let byte = extended_beacon[byte_index];
-//             // Add the byte to the trace vector
-//             trace.push_back<u8>(byte);
-//             // Count the number of even bytes
-//             // If even, add 1 to the state
-//             // Odd byte -> 0, Even byte -> 1
-//             // The state is used to calculate the multiplier index
-//             state = if (byte % 2 == 0) { state + 1 } else { state };
-//             i = i + 1;
-//         };
-//     };
-//
-//     // Processes the payout to the player and returns the game outcome.
-//     let payout_balance_mut = game_data.borrow_balance_mut();
-//     let payout_coin: Coin<SUI> = coin::take(payout_balance_mut, total_funds_amount, ctx);
-//
-//     payout_balance_mut.join(stake);
-//
-//     // transfer the payout coins to the player
-//     transfer::public_transfer(payout_coin, player);
-//     // Emit the Outcome event
-//     emit(Outcome {
-//         game_id,
-//         result: total_funds_amount,
-//         player,
-//         trace
-//     });
-//
-//     // return the total amount to be sent to the player, (and the player address)
-//     (total_funds_amount, player, trace)
-// }
+public fun finish_game(game_id: ID,  game_data: &mut GameData,user_results:&vector<UserGameResult>,  ctx: &mut TxContext): (u64) {
+    // Ensure that the game exists.
+    assert!(game_exists(game_data, game_id), EGameDoesNotExist);
+
+    let exist_game:&PokerGame = dof::borrow(game_data.borrow(),game_id);
+    assert!(exist_game.get_players().length()==user_results.length(),EPlayerMisMatch);
+
+    let mut counter: u64 = 0;
+    let mut total_claim:u64=0;
+    while (counter < user_results.length()) {
+        total_claim = total_claim+user_results[counter].chip_amount;
+        counter = counter + 1;
+    };
+    assert!(total_claim<=exist_game.get_stake(),EExceedClaim);
+
+    // Retrieves and removes the game from HouseData, preparing for outcome calculation.
+    let PokerGame {
+        id,
+        game_start_epoch: _,
+        stake:_,
+        fee_bp: _,
+        players:_,
+    } = dof::remove<ID, PokerGame>(game_data.borrow_mut(), game_id);
+    object::delete(id);
+
+
+   let mut outcome =  Outcome {
+        game_id,
+       result:vector[]
+    };
+
+    let mut player_counter: u64 = 0;
+    while (player_counter < user_results.length()) {
+        if (user_results[player_counter].chip_amount>0){
+            let payout_balance_mut = game_data.borrow_balance_mut();
+            let payout_coin: Coin<SUI> = coin::take(payout_balance_mut, user_results[player_counter].chip_amount, ctx);
+            transfer::public_transfer(payout_coin, user_results[player_counter].player);
+        };
+        let current_num = outcome.result.length();
+        outcome.result.insert(UserRes{
+            player:user_results[player_counter].player,
+            amount:user_results[player_counter].chip_amount,
+        },current_num);
+        player_counter = player_counter + 1;
+    };
+    // Emit the Outcome event
+    emit(outcome);
+    // return the total amount to be sent to the player, (and the player address)
+    (total_claim)
+}
 
 // === Public-View Functions ===
 
@@ -215,18 +171,18 @@ public fun game_exists(game_data: &GameData, game_id: ID): bool {
     dof::exists_(game_data.borrow(), game_id)
 }
 
-public fun borrow_game(game_id: ID, game_data: &GameData): &poker_game::PokerGame {
+public fun borrow_game(game_id: ID, game_data: &GameData): &PokerGame {
     assert!(game_exists(game_data, game_id), EGameDoesNotExist);
     dof::borrow(game_data.borrow(), game_id)
 }
 
-public fun borrow_game_mut(game_id: ID, game_data: &mut GameData): &mut poker_game::PokerGame {
+public fun borrow_game_mut(game_id: ID, game_data: &mut GameData): &mut PokerGame {
     assert!(game_exists(game_data, game_id), EGameDoesNotExist);
     dof::borrow_mut(game_data.borrow_mut(), game_id)
 }
 
 // === Private Functions ===
-fun internal_start_game(coin: Coin<SUI>, game_data: &mut GameData, fee_bp: u16, ctx: &mut TxContext): (ID, &mut poker_game::PokerGame,bool) {
+fun internal_start_game(coin: Coin<SUI>, game_data: &mut GameData, fee_bp: u16, ctx: &mut TxContext): (ID, &mut PokerGame,bool) {
     let user_stake = coin.value();
     assert!(user_stake <= game_data.max_stake(), EStakeTooHigh);
     assert!(user_stake >= game_data.min_stake(), EStakeTooLow);
@@ -242,7 +198,7 @@ fun internal_start_game(coin: Coin<SUI>, game_data: &mut GameData, fee_bp: u16, 
         let game_id = current_game.id();
         emit(NewGame {
             game_id:game_id,
-            user_stake: current_game.get_state(),
+            user_stake: current_game.get_stake(),
             fee_bp,
             players: current_game.get_players(),
         });
@@ -422,4 +378,62 @@ public(package) fun borrow_mut(game_data: &mut GameData): &mut UID {
 //     let success = true;
 //     success
 // }
+
+
+// === Structs ===
+public struct PokerGame has  key,store {
+    id: UID,
+    game_start_epoch: u64,
+    stake: u64, // sui amount
+    fee_bp: u16,
+    players: vector<address>
+}
+
+public fun new_poker_game(ctx :&mut TxContext): PokerGame {
+    PokerGame{
+        id:object::new(ctx),
+        game_start_epoch:ctx.epoch(),
+        stake: 0,
+        fee_bp:100,
+        players:vector[],
+    }
+}
+
+public fun join_user(game: &mut PokerGame,join_user:address,coin_amount: u64) :u64{
+    let current_num = game.players.length();
+    game.players.insert(join_user,current_num);
+    game.stake = game.stake + coin_amount;
+    game.players.length()
+}
+
+// === Public-View Functions ===
+
+/// Returns the epoch in which the game started.
+public fun game_start_epoch(game: &PokerGame): u64 {
+    game.game_start_epoch
+}
+
+/// Returns the total stake.
+public fun stake(game: &PokerGame): u64 {
+    game.stake
+}
+
+/// Returns the fee of the game.
+public fun fee_in_bp(game: &PokerGame): u16 {
+    game.fee_bp
+}
+
+/// Returns the fee of the game.
+public fun get_players(game: &PokerGame): vector<address> {
+    game.players
+}
+
+
+public fun id(game: &PokerGame):ID {
+    object::uid_to_inner(&game.id)
+}
+
+public fun get_stake(game: &PokerGame):u64{
+    game.stake
+}
 
