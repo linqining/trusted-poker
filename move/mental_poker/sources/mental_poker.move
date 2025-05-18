@@ -110,7 +110,7 @@ public fun start_game(bet_coins: Coin<SUI>, game_data: &mut GameData, ctx: &mut 
     let fee_bp = game_data.base_fee_in_bp();
 
 
-    let (id, new_game,isNew) = internal_start_game(bet_coins, game_data, fee_bp, ctx);
+    let (id, _new_game,isNew) = internal_start_game(bet_coins, game_data, fee_bp, ctx);
     //todo 编译器为什么要在面认为可以？
     if (isNew){
         let new_game = new_poker_game(ctx);
@@ -263,7 +263,7 @@ fun internal_start_game(coin: Coin<SUI>, game_data: &mut GameData, fee_bp: u16, 
 public fun initialize_game_data(game_data_cap: GameDataCap, coin: Coin<SUI>, public_key: vector<u8>, ctx: &mut TxContext) {
     assert!(coin.value() > 0, EInsufficientBalance);
 
-    let mut game_data = GameData {
+    let  game_data = GameData {
         id: object::new(ctx),
         balance: coin.into_balance(),
         house: ctx.sender(),
@@ -394,40 +394,40 @@ public(package) fun borrow_mut(game_data: &mut GameData): &mut UID {
 }
 
 // === Test Functions ===
-
-#[test_only]
-public fun start_game_test(ctx: &mut TxContext):bool {
-    let origin = coin::mint_for_testing<SUI>(0,ctx);
-    let balance = coin::mint_for_testing<SUI>(0,ctx);
-    let pk = object::new(ctx);
-    let game_data = &mut GameData{
-        id:  object::new(ctx),
-        // House's balance which also contains the accrued winnings of the house.
-        balance: origin.into_balance<SUI>(),
-        // Address of the house or the game operator.
-        house: @0x12341234,
-        // Public key used to verify the beacon produced by the back-end.
-        public_key: object::uid_to_bytes(&pk),
-        // Maximum stake amount a player can bet in a single game.
-        max_stake: 1_000_000_000,
-        // Minimum stake amount required to play the game.
-        min_stake: 100_000_000,
-        // The accrued fees from games played.
-        fees: balance.into_balance<SUI>(),
-        // The default fee in basis points. 1 basis point = 0.01%.
-        base_fee_in_bp: 100,
-    };
-    //TODO 这里没有drop不能返回，但是在game_data测试start_game会循环引用，有问题，需要反馈
-    // // 这个规则是有冲突的new_game_data_testing 又需要drop,drop又需要uiddrop
-    // let game_data = &mut new_game_data_for_testing(ctx);
-    let user_bet = coin::mint_for_testing<SUI>(100_000_000,ctx);
-    start_game(user_bet,game_data,ctx);
-    let user_bet2 = coin::mint_for_testing<SUI>(100_000_000,ctx);
-    start_game(user_bet2,game_data,ctx);
-    let user_bet3 = coin::mint_for_testing<SUI>(100_000_000,ctx);
-    start_game(user_bet3,game_data,ctx);
-    // object::delete(game_data.id)
-    let success = true;
-    success
-}
+//
+// #[test_only]
+// public fun start_game_test(ctx: &mut TxContext):bool {
+//     let origin = coin::mint_for_testing<SUI>(0,ctx);
+//     let balance = coin::mint_for_testing<SUI>(0,ctx);
+//     let pk = object::new(ctx);
+//     let game_data = &mut GameData{
+//         id:  object::new(ctx),
+//         // House's balance which also contains the accrued winnings of the house.
+//         balance: origin.into_balance<SUI>(),
+//         // Address of the house or the game operator.
+//         house: @0x12341234,
+//         // Public key used to verify the beacon produced by the back-end.
+//         public_key: object::uid_to_bytes(&pk),
+//         // Maximum stake amount a player can bet in a single game.
+//         max_stake: 1_000_000_000,
+//         // Minimum stake amount required to play the game.
+//         min_stake: 100_000_000,
+//         // The accrued fees from games played.
+//         fees: balance.into_balance<SUI>(),
+//         // The default fee in basis points. 1 basis point = 0.01%.
+//         base_fee_in_bp: 100,
+//     };
+//     //TODO 这里没有drop不能返回，但是在game_data测试start_game会循环引用，有问题，需要反馈
+//     // // 这个规则是有冲突的new_game_data_testing 又需要drop,drop又需要uiddrop
+//     // let game_data = &mut new_game_data_for_testing(ctx);
+//     let user_bet = coin::mint_for_testing<SUI>(100_000_000,ctx);
+//     start_game(user_bet,game_data,ctx);
+//     let user_bet2 = coin::mint_for_testing<SUI>(100_000_000,ctx);
+//     start_game(user_bet2,game_data,ctx);
+//     let user_bet3 = coin::mint_for_testing<SUI>(100_000_000,ctx);
+//     start_game(user_bet3,game_data,ctx);
+//     // object::delete(game_data.id)
+//     let success = true;
+//     success
+// }
 
